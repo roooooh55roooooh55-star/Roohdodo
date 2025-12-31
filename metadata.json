@@ -1,0 +1,8 @@
+{
+  "name": "Copy of الحديقة المرعبة - ROOH CONTROL AI",
+  "description": "نظام التحكم والتحليل الرقمي السيادي - النسخة المتقدمة 100%",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
