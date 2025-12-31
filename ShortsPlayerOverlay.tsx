@@ -91,15 +91,18 @@ const ShortsPlayerOverlay: React.FC<ShortsPlayerOverlayProps> = ({
           return (
             <div key={`${video.id}-${idx}`} className="h-full w-full snap-start relative bg-black overflow-hidden flex flex-col items-center justify-center">
               <video 
+                  key={video.video_url}
                   ref={el => { videoRefs.current[`main-${idx}`] = el; }}
-                  src={video.video_url} 
                   crossOrigin="anonymous"
                   className="h-full w-full object-cover transition-opacity duration-700"
                   playsInline preload="auto" loop={false} 
                   onTimeUpdate={(e) => isActive && setCurrentTime(e.currentTarget.currentTime)}
                   onEnded={handleNext} 
                   onClick={(e) => e.currentTarget.paused ? e.currentTarget.play() : e.currentTarget.pause()}
-              />
+              >
+                  <source src={video.video_url} type="video/mp4" />
+                  المتصفح لا يدعم التشغيل
+              </video>
               
               <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/80 pointer-events-none" />
 

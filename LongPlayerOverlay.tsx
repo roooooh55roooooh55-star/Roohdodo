@@ -59,7 +59,8 @@ const LongPlayerOverlay: React.FC<LongPlayerOverlayProps> = ({
     <div ref={containerRef} className="fixed inset-0 bg-black z-[500] flex flex-col overflow-hidden" dir="rtl">
       <div className={`relative bg-black transition-all duration-700 flex flex-col items-center justify-center overflow-hidden ${isFullScreen ? 'h-full flex-grow' : 'h-[35dvh] border-b-2 border-white/10 shadow-2xl'}`}>
         <video 
-          ref={videoRef} src={video.video_url} crossOrigin="anonymous"
+          key={video.video_url}
+          ref={videoRef} crossOrigin="anonymous"
           className={`h-full w-full object-contain ${isFullScreen ? 'rotate-90 scale-[1.65]' : ''}`} 
           playsInline preload="auto"
           onTimeUpdate={(e) => {
@@ -70,7 +71,10 @@ const LongPlayerOverlay: React.FC<LongPlayerOverlayProps> = ({
           onWaiting={() => setIsBuffering(true)}
           onPlaying={() => setIsBuffering(false)}
           onClick={() => videoRef.current?.paused ? videoRef.current?.play() : videoRef.current?.pause()}
-        />
+        >
+          <source src={video.video_url} type="video/mp4" />
+          المتصفح لا يدعم التشغيل
+        </video>
 
         {/* السرد السينمائي - يظهر في سطر واحد بمنتصف الفيديو */}
         {activeText && (

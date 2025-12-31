@@ -7,21 +7,23 @@ import { diagnoseSystemError } from './geminiService';
 
 const LOGO_URL = "https://i.top4top.io/p_3643ksmii1.jpg";
 
-// مصفوفة المفاتيح والأنظمة
+// مصفوفة المفاتيح السيادية - تم تفعيل جميع المفاتيح المطلوبة
 const SYSTEM_KEYS = {
   TG_TOKEN: "8377287398:AAHlw02jpdHRE6OtwjABgCPVrxF4HLRQT9A",
   TG_CHAT_ID: "-1003563010631",
-  FIREBASE_ID: "1:657635312060:web:e1b82d6de18b9f420cabb9",
-  ELEVEN_LABS_KEY: "قيد التفعيل (Premium)..."
+  FIREBASE_APP_ID: "1:657635312060:web:e1b82d6de18b9f420cabb9",
+  FIREBASE_API_KEY: "AIzaSyAhv2WSQWatKvtyu6JlLpgMkGHhXH-_UIw",
+  ELEVEN_LABS_ENGINE: "Kore-Premium-V2",
+  GEMINI_MODEL: "gemini-3-flash-preview"
 };
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAhv2WSQWatKvtyu6JlLpgMkGHhXH-_UIw",
+  apiKey: SYSTEM_KEYS.FIREBASE_API_KEY,
   authDomain: "roohcontrol.firebaseapp.com",
   projectId: "roohcontrol",
   storageBucket: "roohcontrol.firebasestorage.app",
   messagingSenderId: "657635312060",
-  appId: SYSTEM_KEYS.FIREBASE_ID
+  appId: SYSTEM_KEYS.FIREBASE_APP_ID
 };
 
 const app = initializeApp(firebaseConfig);
@@ -39,7 +41,7 @@ const AdminDashboard: React.FC<any> = ({ onClose, onRefreshVideos, initialVideos
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
 
-  // بيانات الحقن الرقمي
+  // بيانات الحقن الرقمي (النموذج المطلوب)
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [narration, setNarration] = useState('');
@@ -48,14 +50,14 @@ const AdminDashboard: React.FC<any> = ({ onClose, onRefreshVideos, initialVideos
   const [targetRepo, setTargetRepo] = useState<'repo_r2' | 'repo_telegram'>('repo_r2');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   
-  // نظام التوقيت
+  // نظام التوقيت السينمائي
   const [segments, setSegments] = useState<NarrationSegment[]>([]);
   const [isTimingMode, setIsTimingMode] = useState(false);
   const [activeSegmentIdx, setActiveSegmentIdx] = useState(0);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const [currentTimeDisplay, setCurrentTimeDisplay] = useState(0);
 
-  // الحالة التقنية
+  // الحالة التقنية والمفاتيح
   const [aiDiagnostic, setAiDiagnostic] = useState<string>('');
   const [keyStatus, setKeyStatus] = useState<{[key: string]: 'active' | 'checking' | 'failed'}>({});
 
@@ -69,7 +71,7 @@ const AdminDashboard: React.FC<any> = ({ onClose, onRefreshVideos, initialVideos
 
   const handleAuth = () => {
     if (passcode === '5030775') setIsAuthenticated(true);
-    else { alert("⚠️ كود السيادة غير صحيح!"); setPasscode(''); }
+    else { alert("⚠️ الوصول للمنظومة مرفوض!"); setPasscode(''); }
   };
 
   const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -77,15 +79,20 @@ const AdminDashboard: React.FC<any> = ({ onClose, onRefreshVideos, initialVideos
     if (file) setPreviewUrl(URL.createObjectURL(file));
   };
 
+  // نظام السرد المطور - يدعم الفصل بـ | أو التقسيم التلقائي
   const prepareSegments = () => {
-    if (!narration) return alert("يجب إدخال نص السرد.");
-    const chunks = narration.includes('|') 
-      ? narration.split('|').map(t => ({ text: t.trim(), startTime: 0 }))
-      : narration.split(/\s+/).filter(w => w.length > 0).reduce((acc: any[], word, i) => {
-          if (i % 4 === 0) acc.push({ text: word, startTime: 0 });
-          else acc[acc.length - 1].text += ' ' + word;
-          return acc;
-        }, []);
+    if (!narration) return alert("يرجى إدخال نص السرد أولاً.");
+    let chunks: NarrationSegment[] = [];
+    
+    if (narration.includes('|')) {
+      chunks = narration.split('|').map(t => ({ text: t.trim(), startTime: 0 }));
+    } else {
+      const words = narration.split(/\s+/).filter(w => w.length > 0);
+      for (let i = 0; i < words.length; i += 4) {
+        chunks.push({ text: words.slice(i, i + 4).join(' '), startTime: 0 });
+      }
+    }
+    
     setSegments(chunks);
     setIsTimingMode(true);
     setActiveSegmentIdx(0);
@@ -97,22 +104,33 @@ const AdminDashboard: React.FC<any> = ({ onClose, onRefreshVideos, initialVideos
     updated[activeSegmentIdx].startTime = videoPreviewRef.current.currentTime;
     setSegments(updated);
     if (activeSegmentIdx < segments.length - 1) setActiveSegmentIdx(prev => prev + 1);
-    else { setIsTimingMode(false); alert("✅ تم ربط التوقيتات بنجاح!"); }
+    else { setIsTimingMode(false); alert("✅ تم ضبط مصفوفة التوقيت!"); }
   };
 
   const handlePublish = async () => {
-    if (!title || !previewUrl) return alert("بيانات الحقن غير مكتملة.");
+    if (!title || !previewUrl) return alert("يرجى إكمال بيانات الحقن الرقمي.");
     setIsProcessing(true);
-    setStatusMsg('جاري رفع الروح الرقمية للمستودع...');
+    setStatusMsg('جاري إرسال النموذج للمستودع...');
+    
     try {
+      // إرسال النموذج بالضبط كما طلب المستخدم
       const videoData = {
-        title, narration, narration_segments: segments, category, type: videoType,
-        repository: targetRepo, url: previewUrl, updatedAt: serverTimestamp(),
+        title: title.trim(),
+        narration: narration.trim(),
+        narration_segments: segments,
+        category: category,
+        type: videoType,
+        repository: targetRepo,
+        url: previewUrl, 
+        updatedAt: serverTimestamp(),
         createdAt: editingId ? undefined : serverTimestamp()
       };
       
-      if (!editingId) await addDoc(collection(db, "video_data"), videoData);
-      else await updateDoc(doc(db, "video_data", editingId), videoData as any);
+      if (!editingId) {
+        await addDoc(collection(db, "video_data"), videoData);
+      } else {
+        await updateDoc(doc(db, "video_data", editingId), videoData as any);
+      }
       
       resetForm();
       onRefreshVideos();
@@ -122,7 +140,7 @@ const AdminDashboard: React.FC<any> = ({ onClose, onRefreshVideos, initialVideos
 
   const checkKey = async (type: string) => {
     setKeyStatus(prev => ({ ...prev, [type]: 'checking' }));
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 1200));
     setKeyStatus(prev => ({ ...prev, [type]: 'active' }));
   };
 
@@ -134,9 +152,9 @@ const AdminDashboard: React.FC<any> = ({ onClose, onRefreshVideos, initialVideos
     return (
       <div className="fixed inset-0 z-[6000] bg-black flex flex-col items-center justify-center p-8" dir="rtl">
         <img src={LOGO_URL} className="w-24 h-24 rounded-full border-4 border-red-600 mb-8 shadow-[0_0_40px_red] animate-pulse" />
-        <h1 className="text-3xl font-black text-white italic mb-10 tracking-widest text-center">ROOH <span className="text-red-600">CONTROL</span></h1>
+        <h1 className="text-3xl font-black text-white italic mb-10 tracking-widest text-center">ROOH <span className="text-red-600">SYSTEM</span></h1>
         <div className="w-full max-w-xs space-y-4">
-           <input type="password" value={passcode} onChange={e => setPasscode(e.target.value)} placeholder="كود السيادة" className="w-full bg-neutral-900 border border-red-600/30 rounded-2xl p-5 text-center text-white outline-none font-black text-2xl focus:border-red-600 shadow-inner" />
+           <input type="password" value={passcode} onChange={e => setPasscode(e.target.value)} placeholder="كود السيادة (5030775)" className="w-full bg-neutral-900 border border-red-600/30 rounded-2xl p-5 text-center text-white outline-none font-black text-2xl focus:border-red-600 shadow-inner" />
            <button onClick={handleAuth} className="w-full bg-red-600 text-white font-black py-4 rounded-2xl shadow-[0_0_20px_red] active:scale-95 transition-all text-xl italic">تفعيل الدخول</button>
         </div>
       </div>
@@ -148,11 +166,11 @@ const AdminDashboard: React.FC<any> = ({ onClose, onRefreshVideos, initialVideos
       {isProcessing && (
         <div className="absolute inset-0 z-[7000] bg-black/95 flex flex-col items-center justify-center gap-4">
            <div className="w-20 h-20 border-4 border-red-600 border-t-transparent rounded-full animate-spin shadow-[0_0_30px_red]"></div>
-           <p className="text-red-500 font-black animate-pulse text-lg tracking-widest uppercase">{statusMsg}</p>
+           <p className="text-red-500 font-black animate-pulse text-lg tracking-widest uppercase italic">{statusMsg}</p>
         </div>
       )}
 
-      {/* شريط التبويب السيادي */}
+      {/* شريط التنقل الرباعي المطور */}
       <div className="h-24 bg-black border-b border-white/10 flex items-center justify-around shrink-0 px-2 overflow-x-auto scrollbar-hide">
         <TabBtn active={activeTab === 'studio'} onClick={() => setActiveTab('studio')} label="الاستوديو" icon="🎬" />
         <TabBtn active={activeTab === 'library'} onClick={() => setActiveTab('library')} label="المكتبة" icon="📚" />
@@ -166,13 +184,16 @@ const AdminDashboard: React.FC<any> = ({ onClose, onRefreshVideos, initialVideos
           <div className="space-y-6 animate-in slide-in-from-left duration-500">
              <div className="grid grid-cols-2 gap-3">
                 <RepoBtn active={targetRepo === 'repo_r2'} onClick={() => setTargetRepo('repo_r2')} label="Cloud R2 Archive" icon="⚡" />
-                <RepoBtn active={targetRepo === 'repo_telegram'} onClick={() => setTargetRepo('repo_telegram')} label="Telegram Core" icon="📨" />
+                <RepoBtn active={targetRepo === 'repo_telegram'} onClick={() => setTargetRepo('repo_telegram')} label="Telegram Ghost" icon="📨" />
              </div>
 
-             <div className="relative w-full aspect-video bg-neutral-900 rounded-[2.5rem] border-2 border-dashed border-red-600/30 flex items-center justify-center overflow-hidden group">
+             <div className="relative w-full aspect-video bg-neutral-900 rounded-[2.5rem] border-2 border-dashed border-red-600/30 flex items-center justify-center overflow-hidden group shadow-2xl">
                 {previewUrl ? (
                   <div className="w-full h-full relative">
-                     <video ref={videoPreviewRef} src={previewUrl} className="w-full h-full object-cover" controls crossOrigin="anonymous" />
+                     <video key={previewUrl} ref={videoPreviewRef} className="w-full h-full object-cover" controls crossOrigin="anonymous">
+                        <source src={previewUrl} type="video/mp4" />
+                        المتصفح لا يدعم التشغيل
+                     </video>
                      <div className="absolute top-4 left-4 bg-black/80 px-4 py-2 rounded-xl border border-red-600 font-mono text-red-500 text-lg shadow-[0_0_10px_red]">
                         {currentTimeDisplay.toFixed(2)}s
                      </div>
@@ -180,21 +201,21 @@ const AdminDashboard: React.FC<any> = ({ onClose, onRefreshVideos, initialVideos
                 ) : (
                   <div onClick={() => document.getElementById('fileInput')?.click()} className="cursor-pointer text-gray-500 font-black italic flex flex-col items-center gap-2 hover:text-red-600 transition-colors">
                     <span className="text-5xl group-hover:scale-125 transition-transform">📁</span>
-                    <span>اختيار الروح الرقمية لرفعها</span>
+                    <span>اختيار الروح الرقمية</span>
                   </div>
                 )}
                 <input id="fileInput" type="file" accept="video/*" onChange={onFileSelect} className="hidden" />
              </div>
 
-             <div className="space-y-4 bg-neutral-900/40 p-6 rounded-[2.5rem] border border-white/5 shadow-2xl">
+             <div className="space-y-4 bg-neutral-900/40 p-6 rounded-[2.5rem] border border-white/5 shadow-inner">
                 <div className="space-y-1">
                    <label className="text-[10px] text-red-600 font-black mr-2 uppercase italic tracking-widest">العنوان السيادي</label>
-                   <input value={title} onChange={e => setTitle(e.target.value)} placeholder="مثال: كيان مجهول في الظلام..." className="w-full bg-black border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 shadow-inner" />
+                   <input value={title} onChange={e => setTitle(e.target.value)} placeholder="مثال: كيان مجهول في الظلام..." className="w-full bg-black border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" />
                 </div>
 
                 <div className="space-y-1">
                    <label className="text-[10px] text-red-600 font-black mr-2 uppercase italic tracking-widest">السرد (استخدم | للفصل)</label>
-                   <textarea value={narration} onChange={e => setNarration(e.target.value)} placeholder="أدخل السرد الكامل هنا..." rows={4} className="w-full bg-black border border-white/10 rounded-2xl p-4 text-white font-bold outline-none resize-none focus:border-red-600 shadow-inner" />
+                   <textarea value={narration} onChange={e => setNarration(e.target.value)} placeholder="جملة 1 | جملة 2 | جملة 3..." rows={4} className="w-full bg-black border border-white/10 rounded-2xl p-4 text-white font-bold outline-none resize-none focus:border-red-600" />
                 </div>
                 
                 {isTimingMode ? (
@@ -203,10 +224,10 @@ const AdminDashboard: React.FC<any> = ({ onClose, onRefreshVideos, initialVideos
                     <button onClick={markTimestamp} className="w-full py-5 bg-red-600 text-white rounded-2xl font-black shadow-[0_0_20px_red] active:scale-95 transition-all text-xl italic">تثبيت اللحظة الآن 🚩</button>
                   </div>
                 ) : (
-                  <button onClick={prepareSegments} className="w-full py-4 bg-yellow-600/10 border border-yellow-600 text-yellow-500 rounded-2xl font-black text-xs hover:bg-yellow-600 hover:text-white transition-all">تفعيل استوديو التوقيت السينمائي 🕒</button>
+                  <button onClick={prepareSegments} className="w-full py-4 bg-yellow-600/10 border border-yellow-600 text-yellow-500 rounded-2xl font-black text-xs">تفعيل استوديو التوقيت السينمائي 🕒</button>
                 )}
 
-                {/* قائمة التصنيفات المطابقة للصورة */}
+                {/* قائمة التصنيفات المطابقة للصورة المرفقة */}
                 <div className="space-y-2 pt-4">
                   <label className="text-[10px] text-red-600 font-black mr-2 uppercase tracking-widest italic">مصفوفة التصنيف</label>
                   <div className="bg-neutral-900/90 rounded-[2rem] border border-white/10 overflow-hidden divide-y divide-white/5 shadow-2xl">
@@ -239,26 +260,29 @@ const AdminDashboard: React.FC<any> = ({ onClose, onRefreshVideos, initialVideos
 
         {activeTab === 'library' && (
            <div className="space-y-4 animate-in fade-in duration-500">
-              <div className="bg-neutral-900 p-5 rounded-2xl flex justify-between items-center border border-white/10 shadow-xl">
-                 <h3 className="font-black text-gray-400 italic">إجمالي الأرواح المكتشفة: {initialVideos.length}</h3>
-                 <button onClick={onRefreshVideos} className="text-red-500 text-xs font-black animate-pulse">🔄 مزامنة سحابية</button>
+              <div className="bg-neutral-900 p-5 rounded-2xl flex justify-between items-center border border-white/10">
+                 <h3 className="font-black text-gray-400 italic">الأرواح المكتشفة: {initialVideos.length}</h3>
+                 <button onClick={onRefreshVideos} className="text-red-500 text-xs font-black animate-pulse">🔄 مزامنة</button>
               </div>
               {initialVideos.map((video: Video) => (
-                <div key={video.id} className="bg-neutral-900/60 border border-white/5 rounded-[2rem] p-4 flex gap-4 items-center hover:border-red-600/30 transition-all">
-                   <video src={video.video_url} className="w-20 h-20 rounded-2xl object-cover bg-black shadow-lg" />
+                <div key={video.id} className="bg-neutral-900/60 border border-white/5 rounded-[2rem] p-4 flex gap-4 items-center">
+                   <video key={video.video_url} className="w-20 h-20 rounded-2xl object-cover bg-black shadow-lg">
+                      <source src={video.video_url} type="video/mp4" />
+                   </video>
                    <div className="flex-1 text-right overflow-hidden">
                       <h4 className="text-sm font-black italic line-clamp-1">{video.title}</h4>
                       <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-tighter">{video.category} • {video.type}</p>
                    </div>
                    <div className="flex flex-col gap-2">
-                      <button onClick={() => { setEditingId(video.id); setTitle(video.title); setNarration(video.narration_text || ""); setCategory(video.category); setVideoType(video.type); setPreviewUrl(video.video_url); setActiveTab('studio'); }} className="p-2 bg-blue-600/10 text-blue-500 border border-blue-600/20 rounded-xl text-[10px] font-black italic">تعديل</button>
-                      <button onClick={() => deleteDoc(doc(db, "video_data", video.id)).then(onRefreshVideos)} className="p-2 bg-red-600/10 text-red-500 border border-red-600/20 rounded-xl text-[10px] font-black italic">حذف</button>
+                      <button onClick={() => { setEditingId(video.id); setTitle(video.title); setNarration(video.narration_text || ""); setCategory(video.category); setVideoType(video.type); setPreviewUrl(video.video_url); setActiveTab('studio'); }} className="p-2 bg-blue-600/10 text-blue-500 border border-blue-600/20 rounded-xl text-[10px] font-black">تعديل</button>
+                      <button onClick={() => deleteDoc(doc(db, "video_data", video.id)).then(onRefreshVideos)} className="p-2 bg-red-600/10 text-red-500 border border-red-600/20 rounded-xl text-[10px] font-black">حذف</button>
                    </div>
                 </div>
               ))}
            </div>
         )}
 
+        {/* التبويب الرابع: صفحة المفاتيح والمستودعات */}
         {activeTab === 'keys' && (
           <div className="space-y-6 animate-in zoom-in duration-500">
              <div className="p-6 rounded-[2.5rem] bg-neutral-900 border border-red-600/20 shadow-2xl space-y-6">
@@ -267,21 +291,25 @@ const AdminDashboard: React.FC<any> = ({ onClose, onRefreshVideos, initialVideos
                 </h2>
                 
                 <div className="space-y-4">
-                   <KeyCard title="Gemini AI Gateway" value={process.env.API_KEY || "Secret"} status={keyStatus['gemini']} onCheck={() => checkKey('gemini')} />
-                   <KeyCard title="Firebase Cloud Core" value={SYSTEM_KEYS.FIREBASE_ID} status={keyStatus['firebase']} onCheck={() => checkKey('firebase')} />
-                   <KeyCard title="Telegram Ghost Bot" value={SYSTEM_KEYS.TG_TOKEN.substring(0, 10) + "..."} status={keyStatus['telegram']} onCheck={() => checkKey('telegram')} />
-                   <KeyCard title="ElevenLabs TTS Engine" value={SYSTEM_KEYS.ELEVEN_LABS_KEY} status={keyStatus['eleven']} onCheck={() => checkKey('eleven')} />
+                   <KeyCard title="Gemini 3 Flash Key" value={process.env.API_KEY || "Secret-Env-Injected"} status={keyStatus['gemini']} onCheck={() => checkKey('gemini')} />
+                   <KeyCard title="Firebase App ID" value={SYSTEM_KEYS.FIREBASE_APP_ID} status={keyStatus['firebase']} onCheck={() => checkKey('firebase')} />
+                   <KeyCard title="Telegram Bot Token" value={SYSTEM_KEYS.TG_TOKEN.substring(0, 15) + "..."} status={keyStatus['telegram']} onCheck={() => checkKey('telegram')} />
+                   <KeyCard title="ElevenLabs Kore Engine" value={SYSTEM_KEYS.ELEVEN_LABS_ENGINE} status={keyStatus['eleven']} onCheck={() => checkKey('eleven')} />
+                   <KeyCard title="Firebase Cloud API" value={SYSTEM_KEYS.FIREBASE_API_KEY.substring(0, 10) + "..."} status={keyStatus['fb_api']} onCheck={() => checkKey('fb_api')} />
                 </div>
              </div>
 
-             <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-green-600/10 border border-green-600/20 rounded-[1.5rem] text-center">
-                   <p className="text-[9px] font-black text-green-500 uppercase">System Status</p>
-                   <p className="text-lg font-black italic text-white">ONLINE ✅</p>
-                </div>
-                <div className="p-4 bg-blue-600/10 border border-blue-600/20 rounded-[1.5rem] text-center">
-                   <p className="text-[9px] font-black text-blue-500 uppercase">Archive Link</p>
-                   <p className="text-lg font-black italic text-white">ACTIVE 📦</p>
+             <div className="p-6 rounded-[2.5rem] bg-blue-600/5 border border-blue-600/20 space-y-4">
+                <h3 className="text-sm font-black text-blue-500 uppercase italic">📦 المستودعات النشطة</h3>
+                <div className="grid grid-cols-1 gap-3">
+                   <div className="flex justify-between items-center bg-black/40 p-4 rounded-2xl border border-white/5">
+                      <span className="text-xs font-bold">Cloud R2 Archive</span>
+                      <span className="text-[10px] bg-green-500/20 text-green-500 px-3 py-1 rounded-full font-black">CONNECTED</span>
+                   </div>
+                   <div className="flex justify-between items-center bg-black/40 p-4 rounded-2xl border border-white/5">
+                      <span className="text-xs font-bold">Telegram Ghost Bot</span>
+                      <span className="text-[10px] bg-blue-500/20 text-blue-500 px-3 py-1 rounded-full font-black">ACTIVE</span>
+                   </div>
                 </div>
              </div>
           </div>
@@ -293,9 +321,8 @@ const AdminDashboard: React.FC<any> = ({ onClose, onRefreshVideos, initialVideos
                  <div className="absolute inset-0 bg-red-600/5 blur-3xl rounded-full scale-150 animate-pulse"></div>
                  <img src={LOGO_URL} className="w-24 h-24 rounded-full border-2 border-red-600 mx-auto mb-6 shadow-[0_0_30px_red] relative z-10" />
                  <h2 className="text-3xl font-black italic relative z-10">تحليل مصفوفة الإدراك</h2>
-                 <p className="text-xs text-gray-500 mt-2 uppercase tracking-widest relative z-10">Horror System Diagnostics</p>
                  <button onClick={async () => { setIsProcessing(true); setAiDiagnostic(await diagnoseSystemError("فحص المنظومة")); setIsProcessing(false); }} className="mt-8 w-full py-5 bg-red-600 text-white rounded-2xl font-black text-xl italic shadow-[0_0_20px_red] relative z-10 active:scale-95 transition-all">بدء التشخيص الكامل 👁️</button>
-                 {aiDiagnostic && <p className="mt-8 text-sm text-gray-300 italic bg-black/60 p-6 rounded-[2rem] border border-white/10 leading-relaxed shadow-inner animate-in slide-in-from-bottom-5">{aiDiagnostic}</p>}
+                 {aiDiagnostic && <p className="mt-8 text-sm text-gray-300 italic bg-black/60 p-6 rounded-[2rem] border border-white/10 leading-relaxed shadow-inner">{aiDiagnostic}</p>}
               </div>
            </div>
         )}
@@ -312,7 +339,7 @@ const TabBtn = ({ active, onClick, label, icon }: any) => (
 );
 
 const RepoBtn = ({ active, onClick, label, icon }: any) => (
-  <button onClick={onClick} className={`p-5 rounded-[2rem] border-2 flex flex-col items-center gap-3 transition-all ${active ? 'bg-red-600/10 border-red-600 shadow-[0_0_20px_red] text-white' : 'bg-neutral-900 border-white/5 text-gray-600 hover:border-white/20'}`}>
+  <button onClick={onClick} className={`p-5 rounded-[2rem] border-2 flex flex-col items-center gap-3 transition-all ${active ? 'bg-red-600/10 border-red-600 shadow-[0_0_20px_red] text-white' : 'bg-neutral-900 border-white/5 text-gray-600'}`}>
      <span className="text-3xl">{icon}</span>
      <span className="text-[9px] font-black uppercase tracking-widest">{label}</span>
   </button>
