@@ -48,19 +48,48 @@ const VideoCardThumbnail: React.FC<{
   const videoRef = useRef<HTMLVideoElement>(null);
   const stats = getDeterministicStats(video.video_url);
   const isTrending = video.isFeatured || stats.views > 500000;
+  const playPromiseRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (isOverlayActive) { v.pause(); return; }
+    
+    const safePause = async () => {
+      if (playPromiseRef.current) {
+        try {
+          await playPromiseRef.current;
+        } catch (e) {
+          // Play failed, safe to ignore
+        }
+      }
+      v.pause();
+    };
+
+    const safePlay = () => {
+      playPromiseRef.current = v.play();
+      playPromiseRef.current.catch(() => {
+        // Auto-play was prevented or interrupted
+      });
+    };
+
+    if (isOverlayActive) { 
+      safePause(); 
+      return; 
+    }
     
     const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) v.play().catch(() => {});
-      else v.pause();
+      if (entry.isIntersecting) {
+        safePlay();
+      } else {
+        safePause();
+      }
     }, { threshold: 0.1 });
     
     observer.observe(v);
-    return () => { observer.disconnect(); v.pause(); };
+    return () => { 
+      observer.disconnect(); 
+      safePause();
+    };
   }, [video.video_url, isOverlayActive]);
 
   return (
@@ -72,14 +101,12 @@ const VideoCardThumbnail: React.FC<{
         className="w-full h-full object-cover transition-all duration-700 pointer-events-none" 
       />
       
-      {/* علامة رائج */}
       {isTrending && (
         <div className="absolute top-3 left-3 z-30 bg-red-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full shadow-[0_0_10px_red] animate-pulse italic">
           رائج 🔥
         </div>
       )}
 
-      {/* أيقونات التفاعل */}
       <div className="absolute top-3 right-3 z-30 flex flex-col gap-2">
         <div className={`p-1.5 rounded-lg backdrop-blur-md border ${interactions.likedIds.includes(video.id) ? 'bg-red-600/40 border-red-500 text-red-500' : 'bg-black/40 border-white/20 text-gray-400'}`}>
           <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -122,7 +149,6 @@ const MainContent: React.FC<any> = ({
 
   return (
     <div className="flex flex-col pb-8 w-full bg-black min-h-screen relative" dir="rtl">
-      {/* الهيدر المطور - اللوجو فوق الاسم كزر تحديث */}
       <header className="flex flex-col items-center py-6 bg-black border-b border-white/5 shadow-2xl sticky top-0 z-[110] backdrop-blur-3xl">
         <button 
           onClick={onHardRefresh} 

@@ -1,5 +1,5 @@
 
-import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { Video } from './types.ts';
 import { incrementViewsInDB } from './supabaseClient.ts';
 import { getDeterministicStats, formatBigNumber, LOGO_URL, InteractiveMarquee } from './MainContent.tsx';
@@ -27,23 +27,63 @@ const LongPlayerOverlay: React.FC<LongPlayerOverlayProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const playPromiseRef = useRef<Promise<void> | null>(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isBuffering, setIsBuffering] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   
   const stats = useMemo(() => video ? getDeterministicStats(video.video_url) : { views: 0, likes: 0 }, [video?.video_url]);
   const suggestions = useMemo(() => allLongVideos.filter(v => v && v.id !== video?.id), [allLongVideos, video]);
+
+  const speakTitle = useCallback((title: string) => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      const speech = new SpeechSynthesisUtterance(title);
+      speech.lang = 'ar-SA';
+      speech.rate = 0.95;
+      window.speechSynthesis.speak(speech);
+    }
+  }, []);
 
   useEffect(() => {
     if (!video || !video.video_url) return;
     const v = videoRef.current;
     if (!v) return;
-    incrementViewsInDB(video.id);
-    v.load();
-    v.play().then(() => setIsPlaying(true)).catch(() => { v.muted = true; v.play(); });
-  }, [video?.id]);
+
+    setLoadError(false);
+
+    const safePlay = async () => {
+      incrementViewsInDB(video.id);
+      // لا داعي لمناداة v.load() يدوياً لأن React سيقوم بتحديث الـ src تلقائياً
+      try {
+        playPromiseRef.current = v.play();
+        await playPromiseRef.current;
+        setIsPlaying(true);
+      } catch (e) {
+        v.muted = true;
+        try {
+          playPromiseRef.current = v.play();
+          await playPromiseRef.current;
+        } catch (e2) {
+          console.error("Critical Playback Error:", e2);
+        }
+      }
+    };
+
+    safePlay();
+
+    return () => {
+      if (playPromiseRef.current) {
+        playPromiseRef.current.then(() => v.pause()).catch(() => {});
+      } else {
+        v.pause();
+      }
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+    };
+  }, [video?.id, video?.video_url]);
 
   const activeText = useMemo(() => {
     if (!video || video.audio_target === 'none') return null;
@@ -58,25 +98,32 @@ const LongPlayerOverlay: React.FC<LongPlayerOverlayProps> = ({
   return (
     <div ref={containerRef} className="fixed inset-0 bg-black z-[500] flex flex-col overflow-hidden" dir="rtl">
       <div className={`relative bg-black transition-all duration-700 flex flex-col items-center justify-center overflow-hidden ${isFullScreen ? 'h-full flex-grow' : 'h-[35dvh] border-b-2 border-white/10 shadow-2xl'}`}>
-        <video 
-          key={video.video_url}
-          ref={videoRef} crossOrigin="anonymous"
-          className={`h-full w-full object-contain ${isFullScreen ? 'rotate-90 scale-[1.65]' : ''}`} 
-          playsInline preload="auto"
-          onTimeUpdate={(e) => {
-            setCurrentTime(e.currentTarget.currentTime);
-            if (e.currentTarget.duration) onProgress(e.currentTarget.currentTime / e.currentTarget.duration);
-          }}
-          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-          onWaiting={() => setIsBuffering(true)}
-          onPlaying={() => setIsBuffering(false)}
-          onClick={() => videoRef.current?.paused ? videoRef.current?.play() : videoRef.current?.pause()}
-        >
-          <source src={video.video_url} type="video/mp4" />
-          المتصفح لا يدعم التشغيل
-        </video>
+        {video.video_url && !loadError ? (
+          <video 
+            key={video.video_url}
+            ref={videoRef} 
+            src={video.video_url}
+            crossOrigin="anonymous" 
+            className={`h-full w-full object-contain ${isFullScreen ? 'rotate-90 scale-[1.65]' : ''}`} 
+            playsInline preload="auto"
+            onTimeUpdate={(e) => {
+              setCurrentTime(e.currentTarget.currentTime);
+              if (e.currentTarget.duration) onProgress(e.currentTarget.currentTime / e.currentTarget.duration);
+            }}
+            onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+            onWaiting={() => setIsBuffering(true)}
+            onPlaying={() => setIsBuffering(false)}
+            onPlay={() => speakTitle(video.title)}
+            onClick={() => videoRef.current?.paused ? videoRef.current?.play() : videoRef.current?.pause()}
+            onError={() => setLoadError(true)}
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-4">
+             <p className="text-white text-xs animate-pulse font-black italic">{loadError ? "خطأ في تحميل المصدر السيادي" : "جاري سحب الأرشيف السيادي..."}</p>
+             {loadError && <button onClick={() => setLoadError(false)} className="text-[10px] bg-red-600 px-4 py-1 rounded-full font-black">إعادة المحاولة</button>}
+          </div>
+        )}
 
-        {/* السرد السينمائي - يظهر في سطر واحد بمنتصف الفيديو */}
         {activeText && (
           <div className="absolute bottom-16 left-0 right-0 z-[100] px-10 text-center animate-in fade-in duration-500">
             <div className="inline-block px-8 py-2 bg-black/60 backdrop-blur-xl rounded-full border border-white/10 shadow-2xl">
@@ -88,15 +135,25 @@ const LongPlayerOverlay: React.FC<LongPlayerOverlayProps> = ({
         )}
 
         {isBuffering && (
-          <div className="absolute inset-0 flex items-center justify-center z-[60] bg-black/20"><div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>
+          <div className="absolute inset-0 flex items-center justify-center z-[60] bg-black/20">
+            <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+          </div>
         )}
 
         <div className="absolute bottom-0 left-0 w-full px-2 pb-1 z-50">
-           <input type="range" min="0" max={duration || 0} step="0.1" value={currentTime} onChange={(e) => {
-             const time = parseFloat(e.target.value);
-             setCurrentTime(time);
-             if (videoRef.current) videoRef.current.currentTime = time;
-           }} className="w-full accent-red-600 h-1 bg-white/20 rounded-lg cursor-pointer" />
+           <input 
+             type="range" 
+             min="0" 
+             max={duration || 0} 
+             step="0.1" 
+             value={currentTime} 
+             onChange={(e) => {
+               const time = parseFloat(e.target.value);
+               setCurrentTime(time);
+               if (videoRef.current) videoRef.current.currentTime = time;
+             }} 
+             className="w-full accent-red-600 h-1 bg-white/20 rounded-lg cursor-pointer" 
+           />
         </div>
 
         <div className="absolute top-5 left-5 right-5 flex justify-between z-50">
@@ -113,7 +170,7 @@ const LongPlayerOverlay: React.FC<LongPlayerOverlayProps> = ({
           <div className="flex items-center gap-5 bg-white/5 p-4 rounded-[2.5rem] border-2 border-white/10 shadow-2xl">
              <img src={LOGO_URL} className="w-14 h-14 rounded-full border-2 border-red-600 shadow-[0_0_20px_red]" />
              <div className="flex flex-col text-right flex-1">
-                <h1 className="text-xl font-black text-white italic drop-shadow-md">{video.title}</h1>
+                <h1 className="text-xl font-black text-white italic drop-shadow-md line-clamp-2">{video.title}</h1>
                 <div className="flex items-center gap-3 mt-2">
                    <button onClick={() => onCategoryClick(video.category)} className="bg-red-600 border-2 border-red-400 px-4 py-0.5 rounded-full shadow-[0_0_12px_red]">
                      <span className="text-[10px] font-black text-white italic uppercase">{video.category}</span>

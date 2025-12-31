@@ -14,23 +14,27 @@ interface SavedPageProps {
 
 const LiveThumbnail: React.FC<{ url: string, isShort: boolean }> = ({ url, isShort }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const playPromiseRef = useRef<Promise<void> | null>(null);
+
   useEffect(() => { 
     const v = videoRef.current;
     if (!v || !url) return;
     
-    let isMounted = true;
-    const playPromise = v.play();
-    if (playPromise !== undefined) {
-      playPromise.catch(() => {});
-    }
+    playPromiseRef.current = v.play();
+    playPromiseRef.current.catch(() => {
+      // Auto-play was prevented
+    });
     
     const handleTimeUpdate = () => { if (v.currentTime >= 5) v.currentTime = 0; };
     v.addEventListener('timeupdate', handleTimeUpdate);
     
     return () => { 
-      isMounted = false;
       v.removeEventListener('timeupdate', handleTimeUpdate); 
-      v.pause(); 
+      if (playPromiseRef.current) {
+        playPromiseRef.current.then(() => v.pause()).catch(() => {});
+      } else {
+        v.pause();
+      }
     };
   }, [url]);
 

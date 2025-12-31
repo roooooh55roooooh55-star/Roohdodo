@@ -28,7 +28,18 @@ const ShortsPlayerOverlay: React.FC<ShortsPlayerOverlayProps> = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
+  const playPromisesRef = useRef<{ [key: string]: Promise<void> | null }>({});
   const [currentTime, setCurrentTime] = useState(0);
+
+  const speakTitle = useCallback((title: string) => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      const speech = new SpeechSynthesisUtterance(title);
+      speech.lang = 'ar-SA';
+      speech.rate = 0.95;
+      window.speechSynthesis.speak(speech);
+    }
+  }, []);
 
   const handleNext = useCallback(() => {
     if (currentIndex < randomizedList.length - 1) {
@@ -41,13 +52,30 @@ const ShortsPlayerOverlay: React.FC<ShortsPlayerOverlayProps> = ({
   useEffect(() => {
     const activeKey = `main-${currentIndex}`;
     const activeVid = videoRefs.current[activeKey];
+    
+    // إيقاف الفيديوهات الأخرى بشكل آمن تماماً
+    Object.keys(videoRefs.current).forEach(async (k) => {
+      if (k !== activeKey) {
+        const v = videoRefs.current[k];
+        if (v) {
+          if (playPromisesRef.current[k]) {
+            try { await playPromisesRef.current[k]; } catch (e) {}
+          }
+          v.pause();
+        }
+      }
+    });
+
     if (activeVid) {
       activeVid.currentTime = 0;
-      activeVid.play().catch(() => { activeVid.muted = true; activeVid.play(); });
+      const playPromise = activeVid.play();
+      playPromisesRef.current[activeKey] = playPromise;
+      playPromise.catch(() => {
+        // في حال منع المتصفح التشغيل التلقائي
+        activeVid.muted = true;
+        activeVid.play().catch(() => {});
+      });
     }
-    Object.keys(videoRefs.current).forEach(k => {
-        if (k !== activeKey) videoRefs.current[k]?.pause();
-    });
   }, [currentIndex]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -62,15 +90,10 @@ const ShortsPlayerOverlay: React.FC<ShortsPlayerOverlayProps> = ({
   const getActiveText = (video: Video) => {
     if (video.audio_target === 'none') return null;
     if (video.audio_target === 'title') return video.title;
-    
-    // استخدام نظام التوقيت السينمائي (4 كلمات لكل ظهور)
     if (video.narration_segments && video.narration_segments.length > 0) {
-      const activeSegment = [...video.narration_segments]
-        .reverse()
-        .find(s => currentTime >= s.startTime);
+      const activeSegment = [...video.narration_segments].reverse().find(s => currentTime >= s.startTime);
       return activeSegment ? activeSegment.text : null;
     }
-    
     return video.narration_text;
   };
 
@@ -90,23 +113,34 @@ const ShortsPlayerOverlay: React.FC<ShortsPlayerOverlayProps> = ({
 
           return (
             <div key={`${video.id}-${idx}`} className="h-full w-full snap-start relative bg-black overflow-hidden flex flex-col items-center justify-center">
-              <video 
-                  key={video.video_url}
-                  ref={el => { videoRefs.current[`main-${idx}`] = el; }}
-                  crossOrigin="anonymous"
-                  className="h-full w-full object-cover transition-opacity duration-700"
-                  playsInline preload="auto" loop={false} 
-                  onTimeUpdate={(e) => isActive && setCurrentTime(e.currentTarget.currentTime)}
-                  onEnded={handleNext} 
-                  onClick={(e) => e.currentTarget.paused ? e.currentTarget.play() : e.currentTarget.pause()}
-              >
-                  <source src={video.video_url} type="video/mp4" />
-                  المتصفح لا يدعم التشغيل
-              </video>
+              {video.video_url ? (
+                <video 
+                    key={video.video_url}
+                    ref={el => { videoRefs.current[`main-${idx}`] = el; }}
+                    src={video.video_url}
+                    crossOrigin="anonymous"
+                    className="h-full w-full object-cover"
+                    playsInline preload="auto" loop={false} 
+                    onTimeUpdate={(e) => isActive && setCurrentTime(e.currentTarget.currentTime)}
+                    onEnded={handleNext} 
+                    onPlay={() => {
+                      if (isActive) {
+                        speakTitle(video.title);
+                      }
+                    }}
+                    onClick={(e) => e.currentTarget.paused ? e.currentTarget.play() : e.currentTarget.pause()}
+                    onError={(e) => {
+                      console.error("Video element failed to load source:", video.video_url);
+                      // محاولة تخطي الفيديو المعطل تلقائياً بعد ثانية
+                      if (isActive) setTimeout(handleNext, 1000);
+                    }}
+                />
+              ) : (
+                <div className="text-white text-xs animate-pulse italic font-black">جاري جلب الروح من المستودعات...</div>
+              )}
               
               <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/80 pointer-events-none" />
 
-              {/* السرد السينمائي - سطر واحد في منتصف الشاشة */}
               {isActive && activeText && (
                 <div className="absolute bottom-40 left-0 right-0 z-[100] px-6 text-center animate-in fade-in slide-in-from-bottom-8 duration-500">
                   <div className="inline-block px-8 py-3 bg-black/40 backdrop-blur-2xl rounded-full border border-white/10 shadow-2xl">
@@ -117,14 +151,12 @@ const ShortsPlayerOverlay: React.FC<ShortsPlayerOverlayProps> = ({
                 </div>
               )}
 
-              {/* أيقونات التفاعل الجانبية */}
               <div className="absolute bottom-24 left-4 flex flex-col items-center gap-6 z-40">
                 <InteractionBtn icon="❤️" label={formatBigNumber(stats.likes)} active={interactions.likedIds.includes(video.id)} onClick={() => onLike(video.id)} color="red" />
                 <InteractionBtn icon="⭐" label="حفظ" active={interactions.savedIds.includes(video.id)} onClick={() => onSave(video.id)} color="yellow" />
                 <InteractionBtn icon="⬇️" label="خزنة" active={interactions.downloadedIds.includes(video.id)} onClick={() => onDownload(video)} color="cyan" />
               </div>
 
-              {/* بيانات الفيديو السفلية */}
               <div className="absolute bottom-10 right-6 left-20 z-40 text-right">
                 <div className="flex items-center gap-4 flex-row-reverse mb-4">
                   <div className="relative">
